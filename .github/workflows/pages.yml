@@ -1,0 +1,42 @@
+name: Deploy to GitHub Pages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the scenes against the witnessed hashes
+        run: |
+          python3 - <<'PY'
+          import hashlib, sys
+          want = dict(l.split()[::-1] for l in open("evidence/scenes.sha256"))
+          ok = True
+          for page, built in (("scenes/dijet.xml", "pythia-dijet-hero.x3d"), ("scenes/zmumu.xml", "pythia-zmumu.x3d")):
+              got = hashlib.sha256(open(page, "rb").read()).hexdigest()
+              print(page, "matches" if got == want[built] else "DIFFERS", built)
+              ok &= got == want[built]
+          sys.exit(0 if ok else 1)
+          PY
+      - name: Assemble the site
+        run: |
+          mkdir -p _site
+          cp -r index.html scenes audio x_ite fonts manifest.json docs .nojekyll _site/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
