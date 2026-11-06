@@ -1,0 +1,25 @@
+name: Check the witnessed scenes
+# Pages publishes the site from the main branch (folder /docs, or / which forwards to docs/). This check only
+# confirms that the published scenes are byte-identical to the witnessed Loom builds in evidence/scenes.sha256.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python3 - <<'PY'
+          import hashlib, sys
+          want = dict(l.split()[::-1] for l in open("evidence/scenes.sha256"))
+          ok = True
+          for page, built in (("docs/scenes/dijet.xml", "pythia-dijet-hero.x3d"), ("docs/scenes/zmumu.xml", "pythia-zmumu.x3d")):
+              got = hashlib.sha256(open(page, "rb").read()).hexdigest()
+              print(page, "matches" if got == want[built] else "DIFFERS", built)
+              ok &= got == want[built]
+          sys.exit(0 if ok else 1)
+          PY

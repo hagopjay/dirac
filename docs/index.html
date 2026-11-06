@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Loom Collider</title>
+<meta name="description" content="One proton collision in X3D, slowed 330 million times, with a time-dilation dial that runs through zero into reverse and a score that follows the clock.">
+
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Ccircle cx=%2216%22 cy=%2216%22 r=%2213%22 fill=%22none%22 stroke=%22%235ddcff%22 stroke-width=%222%22/%3E%3Ccircle cx=%2216%22 cy=%2216%22 r=%223%22 fill=%22%23fff%22/%3E%3C/svg%3E">
+<style>
+html, body { margin: 0; }
+@font-face { font-family: "Big Shoulders Display"; src: url('fonts/display.woff2') format('woff2'); font-weight: 500 900; font-display: swap; }
+@font-face { font-family: "IBM Plex Mono"; src: url('fonts/mono.woff2') format('woff2'); font-weight: 400 500; font-display: swap; }
+@font-face { font-family: "Loom Sans"; src: url('x_ite/assets/fonts/PT_Sans/PTSans-Regular.woff2') format('woff2'); font-display: swap; }
+/* Layout: one screen. A 16:9 stage (the glow pass renders at 16:9) letterboxed on the void, a corner title over it,
+   and a control deck under it: the time dial first, because time is the subject. Single dark world by choice. */
+:root {
+  --void: #02050b;
+  --deck: #08101d;
+  --deck-edge: #16243a;
+  --ink: #dde7f4;
+  --dim: #8698b2;
+  --faint: #4a5a72;
+  --beam: #66e0ff;      /* positive hadron cyan, the forward arrow of time */
+  --anti: #d98cff;      /* the reverse side of the dial, near the muon violet */
+  --amber: #ffb648;     /* calorimeter amber, the flash and the hit */
+  --font-display: "Big Shoulders Display", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --font-body: "Loom Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --s1: 0.75rem; --s2: 0.875rem; --s3: 1rem; --s4: 1.375rem; --s5: 2.25rem;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body { background: var(--void); color: var(--ink); font-family: var(--font-body); font-size: var(--s2); line-height: 1.45; overflow: hidden; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--void); }
+.app { height: 100%; display: flex; flex-direction: column; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 12px; gap: 10px; box-sizing: border-box; }
+.stage-wrap { flex: 1 1 auto; min-height: 0; display: grid; place-items: center; position: relative; }
+.stage { position: relative; aspect-ratio: 16 / 9; width: min(100%, calc((100dvh - var(--deck-h, 190px) - 24px) * 16 / 9)); max-width: 100%; background: #000; border-radius: 3px; overflow: hidden; box-shadow: 0 0 0 1px var(--deck-edge), 0 30px 80px rgba(0, 0, 0, 0.6); }
+x3d-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.grab { position: absolute; inset: 0; cursor: grab; touch-action: none; }
+.grab.on { cursor: grabbing; }
+.corner { position: absolute; left: 14px; top: 12px; pointer-events: none; text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9); max-width: calc(100% - 28px); }
+.corner h1 { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: var(--s5); letter-spacing: 0.02em; line-height: 0.95; text-transform: uppercase; }
+.corner p { margin: 4px 0 0; color: var(--dim); font-size: var(--s1); letter-spacing: 0.04em; }
+.clockface { position: absolute; right: 14px; top: 12px; text-align: right; font-family: var(--font-mono); pointer-events: none; text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9); }
+.clockface .t { font-size: var(--s4); font-variant-numeric: tabular-nums; color: var(--ink); }
+.clockface .u { font-size: var(--s1); color: var(--dim); letter-spacing: 0.06em; text-transform: uppercase; }
+.chip { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); background: rgba(2, 5, 11, 0.82); border: 1px solid var(--deck-edge); color: var(--ink); padding: 6px 12px; border-radius: 999px; font-size: var(--s1); font-family: var(--font-mono); white-space: nowrap; }
+.chip.err { color: #ffd2c4; border-color: #6b2b22; white-space: normal; max-width: 90%; text-align: center; }
+.flashbar { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(circle at 50% 50%, rgba(255, 210, 140, 0.0), rgba(255, 182, 72, 0) 60%); }
+
+.deck { flex: 0 0 auto; background: var(--deck); border: 1px solid var(--deck-edge); border-radius: 6px; padding: 12px 14px; display: grid; gap: 10px; width: min(100%, 1180px); margin: 0 auto; box-sizing: border-box; }
+.deck[hidden] { display: none !important; }
+.dial { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 18px; align-items: end; }
+.dial-label { font-family: var(--font-display); font-weight: 700; font-size: var(--s4); letter-spacing: 0.04em; text-transform: uppercase; line-height: 1; }
+.dial-label span { color: var(--dim); font-family: var(--font-body); font-weight: 400; font-size: var(--s1); letter-spacing: 0.06em; margin-left: 8px; }
+.readout { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; grid-row: span 2; align-self: center; min-width: 15.5em; }
+.readout .big { font-size: var(--s4); color: var(--ink); }
+.readout .big.rev { color: var(--anti); }
+.readout .small { color: var(--dim); font-size: var(--s1); }
+.track { position: relative; height: 44px; min-width: 0; }
+.track input[type=range] { position: absolute; inset: 8px 0 auto; width: 100%; margin: 0; height: 22px; background: transparent; -webkit-appearance: none; appearance: none; cursor: pointer; }
+.track input[type=range]::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--anti) 0%, rgba(217, 140, 255, 0.25) 46%, var(--faint) 48%, var(--faint) 52%, rgba(102, 224, 255, 0.25) 54%, var(--beam) 100%); }
+.track input[type=range]::-moz-range-track { height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--anti) 0%, rgba(217, 140, 255, 0.25) 46%, var(--faint) 48%, var(--faint) 52%, rgba(102, 224, 255, 0.25) 54%, var(--beam) 100%); }
+.track input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; margin-top: -7px; border-radius: 50%; background: var(--ink); border: 3px solid var(--void); box-shadow: 0 0 0 1px var(--ink), 0 0 14px rgba(102, 224, 255, 0.7); }
+.track input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--ink); border: 3px solid var(--void); box-shadow: 0 0 0 1px var(--ink), 0 0 14px rgba(102, 224, 255, 0.7); }
+.track input[type=range]:focus-visible { outline: 2px solid var(--beam); outline-offset: 4px; border-radius: 4px; }
+.ticks { position: absolute; left: 0; right: 0; top: 30px; height: 14px; font-family: var(--font-mono); font-size: 10.5px; color: var(--dim); }
+.ticks span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.ticks span.z { color: var(--ink); }
+.scrub { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: center; }
+.scrub label { font-size: var(--s1); color: var(--dim); letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; }
+.scrub .bar { position: relative; height: 18px; cursor: pointer; touch-action: none; }
+.scrub .bar::before { content: ""; position: absolute; left: 0; right: 0; top: 8px; height: 2px; background: var(--deck-edge); }
+.scrub .flash { position: absolute; top: 2px; width: 2px; height: 14px; background: var(--amber); left: calc(0.5 / 12 * 100%); }
+.scrub .head { position: absolute; top: 3px; width: 3px; height: 12px; background: var(--beam); border-radius: 1px; transform: translateX(-1px); box-shadow: 0 0 8px var(--beam); }
+.row { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; }
+.group { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.group > .gl { font-size: var(--s1); color: var(--dim); letter-spacing: 0.06em; text-transform: uppercase; margin-right: 2px; }
+button, select { font: inherit; font-size: var(--s2); color: var(--ink); background: #0d1828; border: 1px solid var(--deck-edge); border-radius: 4px; padding: 5px 10px; cursor: pointer; }
+button:hover, select:hover { border-color: #2d4566; background: #11203a; }
+button:focus-visible, select:focus-visible { outline: 2px solid var(--beam); outline-offset: 2px; }
+button[aria-pressed=true] { border-color: var(--beam); color: #e9fbff; background: #0c2a3a; }
+button.play { font-weight: 600; min-width: 7.5em; }
+button.sound[aria-pressed=true] { border-color: var(--amber); background: #2a1d0a; color: #fff1dc; }
+.about { color: var(--dim); font-size: var(--s1); }
+.about summary { cursor: pointer; color: var(--dim); }
+.about p { margin: 6px 0 0; max-width: 92ch; }
+.showui { position: absolute; right: calc(14px + env(safe-area-inset-right, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px)); z-index: 5; opacity: 0.75; }
+.showui:hover { opacity: 1; }
+@media (max-width: 720px) {
+  .corner h1 { font-size: var(--s4); }
+  .corner p { display: none; }
+  .clockface { top: auto; bottom: 10px; }
+  .clockface .t { font-size: var(--s3); }
+  .stage-wrap { flex: 0 0 auto; }
+  .dial { grid-template-columns: minmax(0, 1fr); }
+  .readout { text-align: left; grid-row: auto; min-width: 0; }
+  .ticks span.o { display: none; }
+  body { overflow: auto; }
+  .app { height: auto; min-height: 100%; }
+  .stage { width: 100%; }
+}
+.legend { position: absolute; left: 14px; bottom: 34px; pointer-events: none; font-size: var(--s1); color: var(--dim); text-shadow: 0 1px 6px rgba(0,0,0,0.9); }
+.legend .eyebrow { letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 4px; font-family: var(--font-mono); }
+.legend ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.legend li { color: var(--c); display: flex; align-items: center; gap: 6px; }
+.legend li::before { content: ""; width: 14px; height: 2px; background: var(--c); box-shadow: 0 0 6px var(--c); border-radius: 2px; }
+.stage-foot { position: absolute; left: 14px; right: 14px; bottom: 10px; display: flex; justify-content: space-between; gap: 12px; pointer-events: none; font-family: var(--font-mono); font-size: 11px; color: var(--dim); text-shadow: 0 1px 6px rgba(0,0,0,0.9); }
+.stage.no-labels .corner, .stage.no-labels .clockface, .stage.no-labels .legend, .stage.no-labels .stage-foot { display: none; }
+.tools .sl { display: inline-flex; align-items: center; gap: 6px; font-size: var(--s1); color: var(--dim); }
+.tools input[type=range] { width: 110px; accent-color: #5ddcff; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.stage:fullscreen { width: 100vw; height: 100vh; max-width: none; aspect-ratio: auto; }
+@media (max-width: 720px) { .legend, .stage-foot { display: none; } }
+@media (prefers-reduced-motion: reduce) { .scrub .head { box-shadow: none; } }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="stage-wrap">
+    <div class="stage" id="stage">
+      <x3d-canvas id="x3d" preserveDrawingBuffer="true" splashScreen="false" contextMenu="false" notifications="false" timings="false" cache="true"></x3d-canvas>
+      <div class="grab" id="grab" aria-label="Drag to orbit the detector, scroll or pinch to zoom"></div>
+      <div class="corner"><h1>Loom Collider</h1><p id="evline">Proton on proton at 13.6 TeV · Pythia 8 · 456 tracks</p></div>
+      <div class="clockface" aria-live="off"><div class="t" id="tns">+18.0 ns</div><div class="u" id="tnsu">after the crossing</div></div>
+      <aside class="legend" id="legend" aria-label="Colour key">
+        <div class="eyebrow">Event signatures</div>
+        <ul><li style="--c:#5ddcff">+ hadron</li><li style="--c:#ff5da1">− hadron</li><li style="--c:#66efa0">electron</li><li style="--c:#cab5ff">muon</li><li style="--c:#ffc16f">energy deposit</li><li style="--c:#ff5a2a">hottest towers</li></ul>
+      </aside>
+      <div class="stage-foot"><span id="viewhint">Drag to orbit · scroll to zoom · double-click to resume the tour</span><span id="perf">Starting the optics</span></div>
+      <div class="chip" id="chip">Loading the renderer…</div>
+    </div>
+  </div>
+
+  <div class="deck" id="deck">
+    <div class="dial">
+      <div class="dial-label">Time dilation <span>drag through zero to run time backwards</span></div>
+      <div class="readout"><div class="big" id="rbig">× 1 demo speed</div><div class="small" id="rsmall">1 s on screen = 3.0 ns of the collision</div><div class="small" id="rsmall2">slowed 3.3 × 10⁸ times</div></div>
+      <div class="track">
+        <input type="range" id="rate" min="-1000" max="1000" step="1" value="840" aria-label="Time dilation: speed of the collision clock, negative runs backwards">
+        <div class="ticks" id="ticks"></div>
+      </div>
+    </div>
+    <div class="scrub">
+      <label for="scrub">Collision clock</label>
+      <div class="bar" id="scrub" role="slider" tabindex="0" aria-label="Collision clock, 12 seconds of screen time" aria-valuemin="0" aria-valuemax="12" aria-valuenow="6.5"><div class="flash" title="the flash: the bunches cross"></div><div class="head" id="head"></div></div>
+    </div>
+    <div class="row">
+      <div class="group">
+        <button class="play" id="play" aria-pressed="true">Pause</button>
+        <button id="rev" title="R">Reverse</button>
+        <button id="one" title="1">× 1</button>
+        <button id="stop" title="0">Stop time</button>
+      </div>
+      <div class="group">
+        <span class="gl">Score</span>
+        <button class="sound" id="sound" aria-pressed="false">Sound on</button>
+        <select id="take" aria-label="Score take">
+          <option value="d">Pulse (hit on the flash)</option>
+          <option value="a">Ostinato</option>
+        </select>
+        <button id="tape" aria-pressed="true" title="When on, the score slows, drops in pitch and runs backwards with the clock">Follows time</button>
+      </div>
+      <div class="group">
+        <span class="gl">View</span>
+        <button id="tour" aria-pressed="true" title="T: the camera tours the detector on its own; drag to take over">Auto-tour</button>
+        <button data-view="endon" aria-pressed="false">End-on</button>
+        <button data-view="three_quarter" aria-pressed="false">Three-quarter</button>
+        <button data-view="side" aria-pressed="false">Side</button>
+        <button id="glow" aria-pressed="true" title="G: bloom pass on or off">Glow</button>
+      </div>
+      <div class="group">
+        <span class="gl">Event</span>
+        <button data-event="dijet" aria-pressed="true">Dijet</button>
+        <button data-event="zmumu" aria-pressed="false">Z → μμ</button>
+      </div>
+      <div class="group"><button id="hide" title="H">Hide controls</button></div>
+    </div>
+    <div class="row tools">
+      <div class="group">
+        <span class="gl">Optics</span>
+        <label class="sr" for="quality">Render quality</label>
+        <select id="quality" title="Height of the glow pass's render target; its width follows the stage">
+          <option value="auto">Adaptive</option><option value="720">HD 720</option><option value="1080">Full HD 1080</option><option value="1440">Ultra 1440</option><option value="2160">Cinema 2160</option>
+        </select>
+        <label class="sl">Exposure <input id="exposure" type="range" min="65" max="180" value="108"></label>
+        <label class="sl">Bloom <input id="bloomAmount" type="range" min="0" max="200" value="100"></label>
+      </div>
+      <div class="group">
+        <button id="labels" aria-pressed="true" title="L">Labels</button>
+        <button id="fullscreen" title="F">Fullscreen</button>
+        <button id="export4k" title="Glow on: save the current optical frame as a 3840 × 2160 PNG">Save 4K frame</button>
+      </div>
+    </div>
+    <details class="about">
+      <summary>What you are seeing</summary>
+      <p><b>The event.</b> <span id="aboutev">A proton–proton collision at 13.6 TeV from the Pythia 8.318 generator (hard QCD, partonic pT above 400 GeV, seed 41, event 26 of 30): two back-to-back jets.</span> The detector response is a truth-level toy, not a simulation. Every track is one ribbon in a merged strip with its own birth time, species and momentum, drawn by one shared shader; the needles on the calorimeter crown are the real tower energies.</p>
+      <p><b>Time.</b> Light moves 0.9 m per screen second here, so at × 1 one second on screen is 3.0 ns of the collision: a slow-down of 3.3 × 10⁸. The page owns the clock and writes it into the five shaders every frame, so the dial can slow it a further thousand times, stop it, or run it backwards. The sparks at the vertex are a native particle system and only run near demo speed.</p>
+      <p><b>Camera.</b> The auto-tour flies a 54-second loop on its own clock: it starts end-on down the beam, pushes in through the barrel, sweeps low past the side, climbs over the top and pulls back out. It keeps moving when the collision is slowed, stopped or reversed, so stopping time gives you bullet time. Drag to take the camera and orbit the vertex, scroll or pinch to zoom, double-click or press T to hand it back to the tour. The view buttons fly to fixed shots; the glow gets stronger as the camera lines up with the beam.</p>
+      <p><b>Score.</b> Generated by a hosted music model from a style prompt (cinematic orchestral, pulsing tremolo build into a sub-bass impact). A 24-second loop is cut from it so the impact lands on every second flash. With "Follows time" on, the score is a tape: it slows and drops in pitch with the clock and plays backwards when time does.</p>
+      <p><b>Look.</b> Look v3 of the Loom scene builder: v2 folded together with the best of an outside fidelity pass on this page. From that pass: tighter ribbon cores with soft edges whose width follows the render size, machined detector shells (panel seams, ribs, readout traces, key-light glints), a sharper flash with a shock ring, two light shafts in the haze, a multiscale bloom with exposure, a soft highlight shoulder and a vignette, and the optics tools below. Kept from v2: the haze brightness and the vertex sparks. New: a red hot end on the calorimeter crown.</p>
+      <p><b>Optics.</b> Glow renders the whole scene into an offscreen target and blooms it. Render quality sets that target's height (its width follows the stage); Adaptive starts at 1080 and drops to 720 on a slow device. Exposure and Bloom act on the glow pass. Save 4K frame renders one 3840 × 2160 still with the event held. The frame-rate readout is measured on your device.</p>
+      <p><b>Checks.</b> The scenes are generated by the Loom scene builder, never hand-edited. The Loom hep-event witness checks that every visible particle is drawn exactly once, bends the right way for its charge and momentum, starts at its vertex and stays inside the detector; it passes on these look v3 scenes. Renderer: X_ITE 16.5.1, hosted with this page.</p>
+    </details>
+  </div>
+  <button class="showui" id="showui" hidden>Show controls</button>
+</div>
+
+<script>
+(function () {
+  // Prefer the copy hosted with this page; fall back to the pinned CDN build if the host refuses it.
+  var s = document.createElement('script');
+  s.src = 'x_ite/x_ite.min.js';
+  s.onerror = function () { var c = document.createElement('script'); c.src = 'https://cdn.jsdelivr.net/npm/x_ite@16.5.1/dist/x_ite.min.js'; c.onload = boot; c.onerror = fail; document.head.appendChild(c); };
+  s.onload = boot;
+  document.head.appendChild(s);
+  function fail() { var chip = document.getElementById('chip'); chip.className = 'chip err'; chip.textContent = 'The 3D renderer could not load here. Try another browser, or reload the page.'; }
+  window.__bootFail = fail;
+})();
+
+function boot() {
+  'use strict';
+  var CYCLE = 12.0, FLASH = 0.5, NS_PER_S = 0.9 / 0.299792458;   // scene seconds -> ns of the collision at x1
+  var LOOP = 24.0;                                               // score loop: two cycles, hit on the second flash
+  var RMIN = 0.001, RMAX = 4, DEAD = 40;                         // dial: 1/1000 .. 4 times demo speed, dead zone = stopped
+  var SHADERS = ['trkShader2', 'twrShader2', 'shellShader2', 'flashShader2', 'hazeShader2'];
+  // camera rig: the page owns the camera in both modes. Pose = azimuth about +y from the +z (beam) axis, elevation,
+  // distance from the vertex and the framed width at the vertex (fov follows), always looking at the vertex.
+  var VIEWS = {
+    endon: { az: 0, el: 0, d: 120, w: 3.18 },
+    three_quarter: { az: 0.5966, el: 0.3020, d: 13.4, w: 8.6 },
+    side: { az: 1.5430, el: 0.0870, d: 12.65, w: 7.8 }
+  };
+  // auto-tour on the wall clock, so the camera keeps moving while the collision is slowed, stopped or reversed
+  var TOUR = [ // [t s, az, el, d, w]
+    [0, 0.00, 0.00, 120, 3.2], [5, 0.10, 0.05, 60, 3.0], [10, 0.45, 0.22, 22, 4.2], [15, 0.85, 0.32, 11, 7.0],
+    [20, 1.45, 0.08, 9.5, 6.0], [25, 2.05, 0.55, 8.5, 5.0], [30, 2.70, 0.95, 13, 8.0], [35, 3.60, 0.35, 16, 6.5],
+    [40, 4.40, 0.10, 10, 5.2], [45, 5.30, 0.18, 30, 4.0], [50, 6.10, 0.04, 80, 3.3], [54, 6.2832, 0.00, 120, 3.2]];
+  var EVENTS = {
+    dijet: { line: 'Proton on proton at 13.6 TeV · Pythia 8 · 456 tracks', about: 'A proton–proton collision at 13.6 TeV from the Pythia 8.318 generator (hard QCD, partonic pT above 400 GeV, seed 41, event 26 of 30): two back-to-back jets.' },
+    zmumu: { line: 'Z boson to two muons · Pythia 8 · 462 tracks', about: 'A proton–proton collision at 13.6 TeV from the Pythia 8.318 generator in which a Z boson decays to two muons; the two violet tracks run on through the calorimeter into the muon stations.' }
+  };
+  var TAKES = { d: 'audio/loop-d-pulse.wav', a: 'audio/loop-a-ostinato.wav' };
+  var reduce = false; try { reduce = matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+
+  var $ = function (id) { return document.getElementById(id); };
+  var canvas = $('x3d'), chip = $('chip');
+  var st = { tau: 6.5, rate: 1, target: 1, playing: !reduce, view: 'endon', glow: true, tour: !reduce, pose: null, tourT: 0, blend: null, event: 'dijet', loading: false,
+             sound: false, tape: true, take: 'd', nodes: [], clock: null, sparks: null, vp: null, cam: null, scene: null, frames: 0, writes: 0, errors: [] };
+  window.__loom = st;
+  function note(msg) { chip.hidden = !msg; chip.className = 'chip'; if (msg) chip.textContent = msg; }
+  function err(msg) { chip.hidden = false; chip.className = 'chip err'; chip.textContent = msg; st.errors.push(msg); }
+
+  // ---- dial mapping: slider x in [-1000, 1000] <-> rate r (0 inside the dead zone)
+  function rateOf(x) { var a = Math.abs(x); if (a <= DEAD) return 0; var u = (a - DEAD) / (1000 - DEAD); return Math.sign(x) * Math.pow(10, Math.log10(RMIN) + u * (Math.log10(RMAX) - Math.log10(RMIN))); }
+  function xOf(r) { if (r === 0) return 0; var u = (Math.log10(Math.min(RMAX, Math.max(RMIN, Math.abs(r)))) - Math.log10(RMIN)) / (Math.log10(RMAX) - Math.log10(RMIN)); return Math.sign(r) * (DEAD + u * (1000 - DEAD)); }
+  (function ticks() {
+    var t = [[-4, '−4'], [-1, '−1'], [-0.1, '−1/10', 'o'], [-0.01, '−1/100', 'o'], [0, 'stop', 'z'], [0.01, '1/100', 'o'], [0.1, '1/10', 'o'], [1, '× 1'], [4, '4']];
+    var h = '';
+    t.forEach(function (k) { var p = (xOf(k[0]) + 1000) / 2000 * 100; h += '<span class="' + (k[2] || '') + '" style="left:' + p.toFixed(2) + '%">' + k[1] + '</span>'; });
+    $('ticks').innerHTML = h;
+  })();
+  function sup(n) { return String(n).replace(/-/g, '⁻').replace(/[0-9]/g, function (d) { return '⁰¹²³⁴⁵⁶⁷⁸⁹'[+d]; }); }
+  function sci(v) { var e = Math.floor(Math.log10(v)), m = v / Math.pow(10, e); if (m >= 9.95) { m /= 10; e += 1; } return m.toFixed(1) + ' × 10' + sup(e); }
+  function dur(ns) { var a = Math.abs(ns); if (a >= 1) return a.toPrecision(2) + ' ns'; if (a >= 1e-3) return (a * 1e3).toPrecision(2) + ' ps'; return (a * 1e6).toPrecision(2) + ' fs'; }
+  function showRate() {
+    var r = st.playing ? st.target : 0, big = $('rbig'), sm = $('rsmall'), sm2 = $('rsmall2');
+    big.classList.toggle('rev', r < 0);
+    if (!st.playing) { big.textContent = 'Paused'; sm.textContent = 'press Play or Space'; sm2.textContent = ' '; return; }
+    if (r === 0) { big.textContent = 'Time stopped'; sm.textContent = 'the collision clock is frozen'; sm2.textContent = 'slowed infinitely'; return; }
+    var a = Math.abs(r), lab = a >= 0.995 && a <= 1.005 ? '1' : (a >= 1 ? a.toFixed(2) : a >= 0.1 ? a.toFixed(2) : a.toPrecision(2));
+    big.textContent = (r < 0 ? 'Reverse × ' : '× ') + lab + (a >= 0.995 && a <= 1.005 ? ' demo speed' : '');
+    sm.textContent = '1 s on screen = ' + (r < 0 ? '−' : '') + dur(NS_PER_S * a) + ' of the collision';
+    sm2.textContent = 'slowed ' + sci(1e9 / (NS_PER_S * a)) + ' times' + (r < 0 ? ', running backwards' : '');
+  }
+
+  // ---- audio: a tape that follows the clock (forward and reversed buffers of the same loop)
+  var AC = null, gain = null, src = null, srcDir = 0, bufs = {}, lastAC = 0;
+  function ensureAudio() {
+    if (AC) return AC;
+    var C = window.AudioContext || window.webkitAudioContext; if (!C) { err('This browser has no Web Audio, so the score cannot play.'); return null; }
+    AC = new C(); gain = AC.createGain(); gain.gain.value = 0; gain.connect(AC.destination); lastAC = AC.currentTime; return AC;
+  }
+  function loadTake(k) {
+    if (bufs[k]) return Promise.resolve(bufs[k]);
+    note('Loading the score…');
+    return fetch(TAKES[k]).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); })
+      .then(function (ab) { return new Promise(function (ok, no) { AC.decodeAudioData(ab, ok, no); }); })
+      .then(function (fwd) {
+        var n = Math.min(fwd.length, Math.round(LOOP * fwd.sampleRate)), rev = AC.createBuffer(fwd.numberOfChannels, n, fwd.sampleRate), f2 = AC.createBuffer(fwd.numberOfChannels, n, fwd.sampleRate);
+        for (var c = 0; c < fwd.numberOfChannels; c++) { var a = fwd.getChannelData(c), b = rev.getChannelData(c), d = f2.getChannelData(c); for (var i = 0; i < n; i++) { d[i] = a[i]; b[i] = a[n - 1 - i]; } }
+        bufs[k] = { fwd: f2, rev: rev, len: n / fwd.sampleRate }; note(''); return bufs[k];
+      })
+      .catch(function (e) { err('The score could not load (' + (e && e.message || e) + ').'); throw e; });
+  }
+  function stopSrc() { if (src) { try { src.stop(); } catch (e) {} try { src.disconnect(); } catch (e) {} src = null; srcDir = 0; } }
+  function startSrc(dir) {
+    var B = bufs[st.take]; if (!B || !AC) return;
+    stopSrc();
+    var pos = ((st.tau % LOOP) + LOOP) % LOOP;
+    src = AC.createBufferSource(); src.buffer = dir > 0 ? B.fwd : B.rev; src.loop = true;
+    src.playbackRate.value = Math.max(1e-4, Math.abs(st.tape ? st.rate : 1)); src.connect(gain);
+    src.start(0, dir > 0 ? pos : (B.len - pos) % B.len); srcDir = dir;
+  }
+  function audioTick() {
+    if (!AC || !src) return;
+    var r = st.playing ? (st.tape ? st.rate : 1) : 0, dir = r < 0 ? -1 : 1;
+    if (st.tape && r !== 0 && dir !== srcDir) startSrc(dir);
+    var a = Math.abs(r);
+    try { src.playbackRate.setValueAtTime(Math.max(1e-4, a), AC.currentTime); } catch (e) {}
+    var g = !st.sound ? 0 : st.tape ? Math.min(1, Math.max(0, (a - 0.02) / 0.13)) : (st.playing ? 1 : 0);
+    try { gain.gain.setTargetAtTime(g * 0.9, AC.currentTime, 0.03); } catch (e) {}
+  }
+  window.__loomAudio = function () { return { state: AC && AC.state, src: !!src, dir: srcDir, rate: src ? +src.playbackRate.value.toFixed(4) : null, gain: gain ? +gain.gain.value.toFixed(3) : null, take: st.take, loaded: Object.keys(bufs) }; };
+  function soundOn(on) {
+    st.sound = on; $('sound').setAttribute('aria-pressed', String(on)); $('sound').textContent = on ? 'Sound off' : 'Sound on';
+    if (!on) { audioTick(); return; }
+    if (!ensureAudio()) return;
+    AC.resume().then(function () { return loadTake(st.take); }).then(function () { lastAC = AC.currentTime; startSrc(st.rate < 0 && st.tape ? -1 : 1); audioTick(); }).catch(function () {});
+  }
+
+  // ---- scene
+  function named(n) { try { return st.scene.getNamedNode(n); } catch (e) { return null; } }
+  function sf3(a) { return new X3D.SFVec3f(a[0], a[1], a[2]); }
+  function sfr(a) { return new X3D.SFRotation(a[0], a[1], a[2], a[3]); }
+  function writePhase() {
+    var ph = (((st.tau % CYCLE) + CYCLE) % CYCLE) / CYCLE;
+    for (var i = 0; i < st.nodes.length; i++) { try { st.nodes[i].u_phase = ph; st.writes++; } catch (e) { if (st.errors.length < 5) st.errors.push('u_phase: ' + e); } }
+    var sp = st.sparks; if (sp) { var on = st.playing && st.rate > 0.5 && st.rate < 2; try { if (sp.enabled !== on) sp.enabled = on; } catch (e) {} }
+  }
+  function poseOf(v) { return { az: v.az, el: v.el, ld: Math.log(v.d), lw: Math.log(v.w) }; }
+  function mixPose(a, b, k) { return { az: a.az + (b.az - a.az) * k, el: a.el + (b.el - a.el) * k, ld: a.ld + (b.ld - a.ld) * k, lw: a.lw + (b.lw - a.lw) * k }; }
+  function cr(p0, p1, p2, p3, u) { var u2 = u * u, u3 = u2 * u; return 0.5 * (2 * p1 + (-p0 + p2) * u + (2 * p0 - 5 * p1 + 4 * p2 - p3) * u2 + (-p0 + 3 * p1 - 3 * p2 + p3) * u3); }
+  function tourPose(tt) {
+    var T = TOUR, L = T[T.length - 1][0]; tt = ((tt % L) + L) % L;
+    var i = 0; while (i < T.length - 2 && T[i + 1][0] <= tt) i++;
+    var u = (tt - T[i][0]) / (T[i + 1][0] - T[i][0]);
+    var g = function (k) { var n = T.length - 1; if (k < 0) { var q = T[n - 1]; return [q[0] - L, q[1] - 2 * Math.PI, q[2], q[3], q[4]]; } if (k > n) { var r = T[1]; return [r[0] + L, r[1] + 2 * Math.PI, r[2], r[3], r[4]]; } return T[k]; };
+    var a = g(i - 1), b = g(i), c = g(i + 1), d = g(i + 2), f = function (k, lg) { var m = lg ? Math.log : function (x) { return x; }; return cr(m(a[k]), m(b[k]), m(c[k]), m(d[k]), u); };
+    return { az: f(1), el: f(2), ld: f(3, true), lw: f(4, true) };
+  }
+  function lookRot(px, py, pz) {   // orientation that looks from p at the vertex with +y up, as axis-angle
+    var n = Math.hypot(px, py, pz), fx = -px / n, fy = -py / n, fz = -pz / n;
+    var rx = -fz, ry = 0, rz = fx, rn = Math.hypot(rx, rz) || 1; rx /= rn; rz /= rn;            // f x (0,1,0)
+    var ux = ry * fz - rz * fy, uy = rz * fx - rx * fz, uz = rx * fy - ry * fx;                  // r x f
+    var m00 = rx, m01 = ux, m02 = -fx, m10 = ry, m11 = uy, m12 = -fy, m20 = rz, m21 = uz, m22 = -fz, qw, qx, qy, qz, tr = m00 + m11 + m22, s;
+    if (tr > 0) { s = Math.sqrt(tr + 1) * 2; qw = s / 4; qx = (m21 - m12) / s; qy = (m02 - m20) / s; qz = (m10 - m01) / s; }
+    else if (m00 > m11 && m00 > m22) { s = Math.sqrt(1 + m00 - m11 - m22) * 2; qw = (m21 - m12) / s; qx = s / 4; qy = (m01 + m10) / s; qz = (m02 + m20) / s; }
+    else if (m11 > m22) { s = Math.sqrt(1 + m11 - m00 - m22) * 2; qw = (m02 - m20) / s; qx = (m01 + m10) / s; qy = s / 4; qz = (m12 + m21) / s; }
+    else { s = Math.sqrt(1 + m22 - m00 - m11) * 2; qw = (m10 - m01) / s; qx = (m02 + m20) / s; qy = (m12 + m21) / s; qz = s / 4; }
+    var ang = 2 * Math.acos(Math.max(-1, Math.min(1, qw))), sn = Math.sqrt(Math.max(0, 1 - qw * qw));
+    return sn < 1e-6 ? [0, 0, 1, 0] : [qx / sn, qy / sn, qz / sn, ang];
+  }
+  var last = '';
+  function applyCam(P) {
+    st.pose = P; var vp = st.vp; if (!vp) return;
+    var d = Math.exp(P.ld), w = Math.exp(P.lw), ce = Math.cos(P.el);
+    var x = d * ce * Math.sin(P.az), y = d * Math.sin(P.el), z = d * ce * Math.cos(P.az), fov = 2 * Math.atan(w / (2 * d));
+    var key = [x, y, z, fov].map(function (v) { return v.toFixed(5); }).join(' '); if (key === last) return; last = key;
+    try { vp.position = new X3D.SFVec3f(x, y, z); vp.orientation = sfr(lookRot(x, y, z)); vp.fieldOfView = fov; } catch (e) { if (st.errors.length < 5) st.errors.push('camera: ' + e); }
+    // the glow pass: end-on wants a stronger bloom than the oblique views, which see the glass broadside
+    if (st.bloom) { var k = Math.abs(z) / d, x = Math.min(1, Math.max(0, (k - 0.85) / 0.145)); st.viewGain = 0.45 + 0.20 * x * x * (3 - 2 * x); optics(); }
+  }
+  function setTour(on) {
+    st.tour = on; $('tour').setAttribute('aria-pressed', String(on));
+    if (on && st.pose) st.blend = { from: st.pose, t0: performance.now(), d: 2500 };
+  }
+  var fly = null;
+  function setView(view) {
+    st.view = view; setTour(false);
+    document.querySelectorAll('[data-view]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.view === view)); });
+    var to = poseOf(VIEWS[view]);
+    if (st.pose && !reduce) { var from = st.pose, da = to.az - from.az; da -= 2 * Math.PI * Math.round(da / (2 * Math.PI)); fly = { from: from, to: { az: from.az + da, el: to.el, ld: to.ld, lw: to.lw }, t0: performance.now(), d: 1800 }; }
+    else { fly = null; applyCam(to); }
+  }
+  function load() {
+    st.loading = true; st.nodes = []; st.vp = null; st.sparks = null;
+    var url = 'scenes/' + st.event + (st.glow ? '.glow.xml' : '.xml');
+    note('Loading the event…');
+    var B = canvas.browser;
+    return B.loadURL(new X3D.MFString(url)).then(function () {
+      st.scene = B.currentScene;
+      st.clock = named('clock'); if (st.clock) { try { st.clock.enabled = false; } catch (e) {} }
+      st.nodes = SHADERS.map(named).filter(Boolean);
+      if (st.nodes.length !== SHADERS.length) err('Only ' + st.nodes.length + ' of the 5 shaders were found in the scene.');
+      st.sparks = named('sparks');
+      st.vp = named('vp_endon');   // bound in the plain scene; in the glow pass the RenderedTexture renders from its last Viewpoint, which is vp_endon
+      st.bloom = st.glow ? named('bloomShader') : null; st.rt = st.glow ? named('scene_rt') : null; st.inks = ['trkShader2', 'twrShader2'].map(named).filter(Boolean);
+      last = ''; applyCam(st.pose || poseOf(VIEWS[st.view])); writePhase();
+      st.loading = false; configure(); if (!st.errors.length) note('');
+    }).catch(function (e) { st.loading = false; err('The event could not load (' + (e && e.message || e) + ').'); });
+  }
+
+  // ---- the clock
+  var lastT = performance.now();
+  function frame(now) {
+    var dtWall = Math.max(0, (now - lastT) / 1000), dt = Math.min(0.25, dtWall); lastT = now;
+    if (AC && src && st.sound) { var ac = AC.currentTime, d2 = ac - lastAC; lastAC = ac; if (d2 >= 0 && d2 < 1) dt = d2; } else if (AC) lastAC = AC.currentTime;
+    var tgt = st.playing ? st.target : 0;
+    var k = 1 - Math.exp(-dt / 0.22);                    // tape glide
+    var applied = st.rate;                                // the rate the audio ran at since the last frame
+    st.rate += (tgt - st.rate) * k; if (Math.abs(st.rate - tgt) < 1e-5) st.rate = tgt;
+    st.tau += applied * dt;
+    st.frames++;
+    var wall = Math.min(0.25, dtWall);
+    if (st.tour && !dragging3) {
+      st.tourT += wall; var P = tourPose(st.tourT);
+      if (st.blend) { var b = Math.min(1, (now - st.blend.t0) / st.blend.d), e = b * b * (3 - 2 * b), F = st.blend.from, da = P.az - F.az; da -= 2 * Math.PI * Math.round(da / (2 * Math.PI)); P = mixPose(F, { az: F.az + da, el: P.el, ld: P.ld, lw: P.lw }, e); if (b >= 1) st.blend = null; }
+      applyCam(P);
+    } else if (fly) { var u = Math.min(1, (now - fly.t0) / fly.d), e2 = u * u * (3 - 2 * u); applyCam(mixPose(fly.from, fly.to, e2)); if (u >= 1) fly = null; }
+    if (!st.loading) writePhase();
+    audioTick(); perfTick(now, dtWall);
+    var s = ((st.tau % CYCLE) + CYCLE) % CYCLE, ns = (s - FLASH) * NS_PER_S;
+    $('tns').textContent = (ns >= 0 ? '+' : '−') + Math.abs(ns).toFixed(1) + ' ns';
+    $('tnsu').textContent = ns >= 0 ? 'after the crossing' : 'before the crossing';
+    $('head').style.left = (s / CYCLE * 100).toFixed(3) + '%';
+    $('scrub').setAttribute('aria-valuenow', s.toFixed(1));
+    requestAnimationFrame(frame);
+  }
+
+  // ---- controls
+  var dial = $('rate');
+  function setTarget(r, fromDial) { st.target = r; if (!fromDial) dial.value = Math.round(xOf(r)); showRate(); }
+  dial.addEventListener('input', function () { var x = +dial.value; if (Math.abs(x - 840) < 12) { x = 840; dial.value = 840; } if (Math.abs(x + 840) < 12) { x = -840; dial.value = -840; } setTarget(rateOf(x), true); });
+  function setPlaying(p) { st.playing = p; $('play').textContent = p ? 'Pause' : 'Play'; $('play').setAttribute('aria-pressed', String(p)); showRate(); }
+  $('play').onclick = function () { setPlaying(!st.playing); };
+  $('rev').onclick = function () { setTarget(st.target === 0 ? -1 : -st.target); if (!st.playing) setPlaying(true); };
+  $('one').onclick = function () { setTarget(1); if (!st.playing) setPlaying(true); };
+  $('stop').onclick = function () { setTarget(0); };
+  $('sound').onclick = function () { soundOn(!st.sound); };
+  $('tape').onclick = function () { st.tape = !st.tape; this.setAttribute('aria-pressed', String(st.tape)); if (src) startSrc(st.tape && st.rate < 0 ? -1 : 1); };
+  $('take').onchange = function () { st.take = this.value; if (st.sound && AC) loadTake(st.take).then(function () { startSrc(st.tape && st.rate < 0 ? -1 : 1); }).catch(function () {}); };
+  document.querySelectorAll('[data-view]').forEach(function (b) { b.onclick = function () { setView(b.dataset.view); }; });
+  $('glow').onclick = function () { if (st.loading) return; st.glow = !st.glow; this.setAttribute('aria-pressed', String(st.glow)); load(); };
+  document.querySelectorAll('[data-event]').forEach(function (b) { b.onclick = function () {
+    if (st.loading || st.event === b.dataset.event) return; st.event = b.dataset.event;
+    document.querySelectorAll('[data-event]').forEach(function (c) { c.setAttribute('aria-pressed', String(c === b)); });
+    $('evline').textContent = EVENTS[st.event].line; $('aboutev').textContent = EVENTS[st.event].about; load(); }; });
+  function setHidden(h) { $('deck').hidden = h; $('showui').hidden = !h; document.documentElement.style.setProperty('--deck-h', h ? '0px' : deckH() + 'px'); }
+  function deckH() { return $('deck').getBoundingClientRect().height || 190; }
+  $('hide').onclick = function () { setHidden(true); };
+  $('tour').onclick = function () { setTour(!st.tour); };
+  // orbit and zoom: drag turns the camera about the vertex, the wheel or a pinch changes the framed width
+  var grab = $('grab'), dragging3 = false, ptrs = {}, pinch0 = null;
+  function cur() { return st.pose || poseOf(VIEWS[st.view]); }
+  grab.addEventListener('pointerdown', function (e) { ptrs[e.pointerId] = [e.clientX, e.clientY]; dragging3 = true; grab.classList.add('on'); try { grab.setPointerCapture(e.pointerId); } catch (x) {} if (st.tour) setTour(false); fly = null;
+    document.querySelectorAll('[data-view]').forEach(function (b) { b.setAttribute('aria-pressed', 'false'); }); });
+  grab.addEventListener('pointermove', function (e) {
+    var p = ptrs[e.pointerId]; if (!p) return; var ids = Object.keys(ptrs);
+    if (ids.length === 2) { var a = ptrs[ids[0]], b = ptrs[ids[1]], d0 = Math.hypot(a[0] - b[0], a[1] - b[1]); ptrs[e.pointerId] = [e.clientX, e.clientY]; a = ptrs[ids[0]]; b = ptrs[ids[1]];
+      var d1 = Math.hypot(a[0] - b[0], a[1] - b[1]); if (d0 > 0 && d1 > 0) { var P = cur(); applyCam({ az: P.az, el: P.el, ld: P.ld, lw: Math.min(Math.log(24), Math.max(Math.log(1.2), P.lw - Math.log(d1 / d0))) }); } return; }
+    var dx = e.clientX - p[0], dy = e.clientY - p[1]; ptrs[e.pointerId] = [e.clientX, e.clientY];
+    var Q = cur(), r = grab.getBoundingClientRect(), s = 3.2 / Math.max(300, r.width);
+    var el = Math.min(1.45, Math.max(-1.45, Q.el + dy * s)), ld = Q.ld;
+    if (Q.ld > Math.log(40) && Math.abs(dx) + Math.abs(dy) > 0) ld = Math.max(Math.log(14), Q.ld - (Math.abs(dx) + Math.abs(dy)) * 0.01);   // leaving the telephoto end-on view: come in close
+    applyCam({ az: Q.az - dx * s, el: el, ld: ld, lw: Q.lw });
+  });
+  function up(e) { delete ptrs[e.pointerId]; if (!Object.keys(ptrs).length) { dragging3 = false; grab.classList.remove('on'); } }
+  grab.addEventListener('pointerup', up); grab.addEventListener('pointercancel', up);
+  grab.addEventListener('wheel', function (e) { e.preventDefault(); if (st.tour) setTour(false); fly = null; var P = cur(); applyCam({ az: P.az, el: P.el, ld: P.ld, lw: Math.min(Math.log(24), Math.max(Math.log(1.2), P.lw + e.deltaY * 0.0015)) }); }, { passive: false });
+  grab.addEventListener('dblclick', function () { setTour(true); });
+  $('showui').onclick = function () { setHidden(false); };
+  // scrub the collision clock
+  var bar = $('scrub'), dragging = false;
+  function scrubTo(ev) { var r = bar.getBoundingClientRect(), u = Math.min(0.9999, Math.max(0, (ev.clientX - r.left) / r.width)); var cyc = Math.floor(st.tau / CYCLE); st.tau = cyc * CYCLE + u * CYCLE; if (src) startSrc(srcDir || 1); }
+  bar.addEventListener('pointerdown', function (e) { dragging = true; try { bar.setPointerCapture(e.pointerId); } catch (x) {} scrubTo(e); });
+  bar.addEventListener('pointermove', function (e) { if (dragging) scrubTo(e); });
+  bar.addEventListener('pointerup', function () { dragging = false; });
+  bar.addEventListener('keydown', function (e) { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { st.tau += (e.key === 'ArrowLeft' ? -0.25 : 0.25); if (src) startSrc(srcDir || 1); e.preventDefault(); } });
+  document.addEventListener('keydown', function (e) {
+    if (e.target && (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT' && e.target.type !== 'range')) return;
+    var k = e.key.toLowerCase();
+    if (k === ' ' && e.target === document.body) { setPlaying(!st.playing); e.preventDefault(); }
+    else if (k === 'r') $('rev').click(); else if (k === '1') $('one').click(); else if (k === '0') $('stop').click();
+    else if (k === 'g') $('glow').click(); else if (k === 'h') setHidden(!$('deck').hidden); else if (k === 'm') $('sound').click();
+    else if (k === 'v') { var ks = Object.keys(VIEWS); setView(ks[(ks.indexOf(st.view) + 1) % ks.length]); }
+    else if (k === 't') setTour(!st.tour);
+    else if (k === 'f') $('fullscreen').click(); else if (k === 'l') $('labels').click();
+  });
+  try { new ResizeObserver(function () { if (!$('deck').hidden) document.documentElement.style.setProperty('--deck-h', deckH() + 'px'); }).observe($('deck')); } catch (e) {}
+  document.documentElement.style.setProperty('--deck-h', deckH() + 'px');
+
+  // ---- optics (folded in from the outside fidelity pass): the glow pass's render target follows the stage at a chosen
+  // height, ribbon widths and blur radius scale with it, exposure and bloom are live, and a 3840 x 2160 still can be saved.
+  var adaptive = 1080, samples = [], lastMetric = 0, busy = false;
+  function glCtx() { try { return canvas.browser.getContext(); } catch (e) { return null; } }
+  function optics() {
+    if (!st.bloom) return;
+    try { st.bloom.u_gain = (st.viewGain || 0.55) * (+$('bloomAmount').value / 100); st.bloom.u_exposure = +$('exposure').value / 100; } catch (e) {}
+  }
+  function configure(force) {
+    if (st.loading && !force) return;
+    var box = $('stage').getBoundingClientRect(), h = force || ($('quality').value === 'auto' ? adaptive : +$('quality').value);
+    var gl = glCtx(), lim = Math.min(4096, gl ? gl.getParameter(gl.MAX_TEXTURE_SIZE) : 4096);
+    h = Math.min(lim, h); var wdt = Math.min(lim, Math.round(h * (box.width || 16) / (box.height || 9)));
+    if (force === 2160) { wdt = 3840; h = 2160; }
+    try {
+      if (st.rt) { st.rt.width = wdt; st.rt.height = h; }
+      if (st.bloom) { st.bloom.u_px = new X3D.SFVec2f(1 / wdt, 1 / h); st.bloom.u_sigma = 15 * h / 900; }
+      (st.inks || []).forEach(function (n) { n.u_resolutionScale = st.glow ? h / 900 : Math.max(1, box.height * (window.devicePixelRatio || 1) / 900); });
+    } catch (e) { if (st.errors.length < 5) st.errors.push('optics: ' + e); }
+    st.renderSize = st.glow ? [wdt, h] : null; optics();
+    $('exposure').disabled = $('bloomAmount').disabled = $('quality').disabled = !st.glow;
+  }
+  function perfTick(now, dt) {
+    if (dt > 0 && dt < 1) samples.push(dt);
+    if (now - lastMetric < 1000) return; lastMetric = now;
+    var fps = samples.length / (samples.reduce(function (a, b) { return a + b; }, 0) || 1); samples = [];
+    st.observedFps = +fps.toFixed(1);
+    $('perf').textContent = Math.round(fps) + ' fps on this device · ' + (st.renderSize ? st.renderSize[0] + ' × ' + st.renderSize[1] + ' glow pass' : 'direct render');
+    if ($('quality').value === 'auto' && now > 12000 && st.glow && !busy) {   // adaptive only steps between 720 and 1080; fixed tiers never change
+      if (fps < 26 && adaptive > 720) { adaptive = 720; configure(); } else if (fps > 56 && adaptive < 1080) { adaptive = 1080; configure(); }
+    }
+  }
+  function capture() {
+    var c = canvas.browser.getCanvas(); c = c[0] || c;
+    return canvas.browser.nextFrame().then(function () { return canvas.browser.nextFrame(); }).then(function () {
+      var o = document.createElement('canvas'); o.width = 3840; o.height = 2160; o.getContext('2d').drawImage(c, 0, 0, 3840, 2160); return o.toDataURL('image/png'); });
+  }
+  function save4K() {
+    if (busy || st.loading) return;
+    if (!st.glow) { note('Turn Glow on to save the optical 4K frame.'); setTimeout(function () { if (!st.errors.length) note(''); }, 3500); return; }
+    busy = true; var was = st.playing, tourWas = st.tour, B = canvas.browser, scale = B.getBrowserOption('ContentScale'), btn = $('export4k');
+    setPlaying(false); st.tour = false; btn.disabled = true; btn.textContent = 'Rendering…';
+    var c = B.getCanvas(); c = c[0] || c;
+    configure(2160); B.setBrowserOption('ContentScale', 3840 / c.getBoundingClientRect().width);
+    new Promise(function (r) { setTimeout(r, 700); }).then(capture).then(function (url) {
+      var a = document.createElement('a'); a.href = url; a.download = 'Loom-Collider-' + st.event + '-4K.png'; a.click(); note('Frame saved.'); setTimeout(function () { if (!st.errors.length) note(''); }, 1800);
+    }).catch(function (e) { note('Frame export unavailable: ' + (e && e.message || e)); }).then(function () {
+      B.setBrowserOption('ContentScale', scale); st.tour = tourWas; setPlaying(was); busy = false; btn.disabled = false; btn.textContent = 'Save 4K frame'; configure(); });
+  }
+  $('quality').onchange = function () { configure(); };
+  $('exposure').oninput = $('bloomAmount').oninput = optics;
+  $('labels').onclick = function () { var on = this.getAttribute('aria-pressed') !== 'true'; this.setAttribute('aria-pressed', String(on)); $('stage').classList.toggle('no-labels', !on); };
+  $('fullscreen').onclick = function () { var p = document.fullscreenElement ? document.exitFullscreen() : $('stage').requestFullscreen && $('stage').requestFullscreen(); if (p && p.catch) p.catch(function () { note('Fullscreen is not available here.'); }); };
+  document.addEventListener('fullscreenchange', function () { $('fullscreen').textContent = document.fullscreenElement ? 'Exit fullscreen' : 'Fullscreen'; configure(); });
+  $('export4k').onclick = save4K;
+  try { new ResizeObserver(function () { if (!busy) configure(); }).observe($('stage')); } catch (e) {}
+
+  setPlaying(st.playing); showRate();
+  customElements.whenDefined('x3d-canvas').then(function () { return load(); }).then(function () { st.ready = true; lastT = performance.now(); requestAnimationFrame(frame); })
+    .catch(function (e) { err('The renderer failed to start (' + (e && e.message || e) + ').'); });
+}
+</script>
+
+</body>
+</html>
