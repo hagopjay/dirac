@@ -10,7 +10,7 @@ It is a demo, not a physics study. The events are real generator output (Pythia 
 
 ## Also on WebGPU
 
-**https://hagopjay.github.io/dirac/webgpu/** draws the same dijet scene, byte for byte, with a WebGPU renderer instead of WebGL. The page carries its own small X3D runtime: it parses the scene, runs its ROUTEs and draws it with core WebGPU, the scene's five GLSL shaders hand-ported to WGSL. It needs Chrome or Edge 113 or later (or another browser with WebGPU), and says so if WebGPU is missing.
+**https://hagopjay.github.io/dirac/webgpu/** (it forwards to `docs/webgpu/`, so either Pages folder works) draws the same dijet scene with a WebGPU renderer instead of WebGL. The page carries its own small X3D runtime: it parses the scene, runs its ROUTEs and draws it with core WebGPU, the scene's five GLSL shaders hand-ported to WGSL. It needs Chrome or Edge 113 or later (or another browser with WebGPU), and says so if WebGPU is missing.
 
 - **Cinematic HDR** (the default) adds up the light in 16-bit float, then multiscale bloom and a tone curve that lets hot colours run to amber and white. It also adds art the scene does not hold, and says so on the page: studio reflections on the detector glass, a lens flare on the flash, filtered fine detail. **As authored** shows the five shaders exactly as written.
 - Three viewpoints with animated transitions, a tour, slow motion, an event scrubber, a spark slider up to 250,000, three grades with exposure and bloom controls, and quality tiers; the default suits an integrated GPU.
