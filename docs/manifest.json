@@ -43,6 +43,10 @@
    "bytes": 2650828,
    "sha256": "346f43c14d4140c0b4d41bae2794129b41581115d8d4ac920605dbffc2cb8b74"
   },
+  "webgpu/index.html": {
+   "bytes": 2373794,
+   "sha256": "09dfac530c571bd2a422910b2c3e0ab0f9904459e6a889d9f63e6866d42a036b"
+  },
   "x_ite/LICENSE.md": {
    "bytes": 2793,
    "sha256": "4b4a56dafaa360d8541ed5425e9e891cb678e6cd5eaf71bfe7ef25514db01695"
