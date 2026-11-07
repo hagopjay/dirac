@@ -8,6 +8,16 @@ It is a demo, not a physics study. The events are real generator output (Pythia 
 
 **Open it:** https://hagopjay.github.io/dirac/ (GitHub Pages from the `main` branch, folder `/docs` or `/ (root)`; both work), or run it locally (below). It needs WebGL and a browser with hardware acceleration.
 
+## Also on WebGPU
+
+**https://hagopjay.github.io/dirac/webgpu/** draws the same dijet scene, byte for byte, with a WebGPU renderer instead of WebGL. The page carries its own small X3D runtime: it parses the scene, runs its ROUTEs and draws it with core WebGPU, the scene's five GLSL shaders hand-ported to WGSL. It needs Chrome or Edge 113 or later (or another browser with WebGPU), and says so if WebGPU is missing.
+
+- **Cinematic HDR** (the default) adds up the light in 16-bit float, then multiscale bloom and a tone curve that lets hot colours run to amber and white. It also adds art the scene does not hold, and says so on the page: studio reflections on the detector glass, a lens flare on the flash, filtered fine detail. **As authored** shows the five shaders exactly as written.
+- Three viewpoints with animated transitions, a tour, slow motion, an event scrubber, a spark slider up to 250,000, three grades with exposure and bloom controls, and quality tiers; the default suits an integrated GPU.
+- **Settings and export** makes a 2K or 4K PNG without the panels, captioned as a render of a generated event.
+
+Its source and build live in the Loom repository, `x3d.webgpu/demo/` (`collider-v2.html`, built by `src/build-v2.py`). Frame rates are not measured; the page shows a frame interval on your own screen and sends nothing.
+
 ## What you can do
 
 | control | action |
@@ -43,6 +53,7 @@ On Windows double-click `launch-windows.bat`; under WSL run `bash launch-wsl.sh`
 | the scenes here are the witnessed ones | `docs/scenes/dijet.xml` and `docs/scenes/zmumu.xml` are byte-identical to the witnessed builds in `evidence/scenes.sha256`; a check workflow tests this on every push | C |
 | the look is close to the reference still | dijet end-on with glow: mean luma 0.170 against 0.190, blue 63% against 63%, cyan 12% against 9%; red is still short (2.7% against 7.5%) (`docs/frames/stats.json`) | C for the numbers, S for "beautiful" |
 | frame rate | not measured here; the page shows the frame rate on your own device | none |
+| the WebGPU page draws the witnessed scene | `docs/webgpu/index.html` embeds the text of `docs/scenes/dijet.xml` (sha256 `59dfeb32…`), checked by comparing the two | C |
 
 The glow files (`docs/scenes/*.glow.xml`) wrap the witnessed scene in a RenderedTexture and a bloom shader; they add no geometry. The physics is plausible, not exact: tolerances are loose, there are no mass-shell or calorimeter sum rules, and the detector is a toy.
 

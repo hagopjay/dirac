@@ -42,6 +42,8 @@ x3d-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: b
 .corner { position: absolute; left: 14px; top: 12px; pointer-events: none; text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9); max-width: calc(100% - 28px); }
 .corner h1 { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: var(--s5); letter-spacing: 0.02em; line-height: 0.95; text-transform: uppercase; }
 .corner p { margin: 4px 0 0; color: var(--dim); font-size: var(--s1); letter-spacing: 0.04em; }
+.corner a.alt { pointer-events: auto; display: inline-block; margin-top: 8px; padding: 4px 9px; border: 1px solid var(--faint); border-radius: 3px; color: var(--ink); font-family: var(--font-mono); font-size: var(--s1); letter-spacing: 0.04em; text-decoration: none; background: rgba(0, 0, 0, 0.35); }
+.corner a.alt:hover, .corner a.alt:focus-visible { border-color: var(--beam); }
 .clockface { position: absolute; right: 14px; top: 12px; text-align: right; font-family: var(--font-mono); pointer-events: none; text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9); }
 .clockface .t { font-size: var(--s4); font-variant-numeric: tabular-nums; color: var(--ink); }
 .clockface .u { font-size: var(--s1); color: var(--dim); letter-spacing: 0.06em; text-transform: uppercase; }
@@ -123,7 +125,7 @@ button.sound[aria-pressed=true] { border-color: var(--amber); background: #2a1d0
     <div class="stage" id="stage">
       <x3d-canvas id="x3d" preserveDrawingBuffer="true" splashScreen="false" contextMenu="false" notifications="false" timings="false" cache="true"></x3d-canvas>
       <div class="grab" id="grab" aria-label="Drag to orbit the detector, scroll or pinch to zoom"></div>
-      <div class="corner"><h1>Loom Collider</h1><p id="evline">Proton on proton at 13.6 TeV · Pythia 8 · 456 tracks</p></div>
+      <div class="corner"><h1>Loom Collider</h1><p id="evline">Proton on proton at 13.6 TeV · Pythia 8 · 456 tracks</p><a class="alt" href="webgpu/" title="The same dijet event drawn by a WebGPU renderer">Also on WebGPU →</a></div>
       <div class="clockface" aria-live="off"><div class="t" id="tns">+18.0 ns</div><div class="u" id="tnsu">after the crossing</div></div>
       <aside class="legend" id="legend" aria-label="Colour key">
         <div class="eyebrow">Event signatures</div>
